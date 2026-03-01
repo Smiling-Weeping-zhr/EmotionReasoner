@@ -5,7 +5,6 @@
  For full license text, see the LICENSE_Lavis file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
-import re
 import random
 from typing import Iterable, List, Dict, Tuple
 
@@ -13,14 +12,7 @@ from omegaconf import OmegaConf
 from qwen_omni_utils import process_mm_info
 from torch.utils.data import Dataset, ConcatDataset
 from torch.utils.data.dataloader import default_collate
-# from utils.utils import get_emotion_synonyms
-
-import re
-
-def extract_label_content(text: str) -> str:
-    """只提取 <label>...</label> 中的内容"""
-    match = re.search(r'<answer>(.*?)</answer>', text, re.DOTALL)
-    return match.group(1).strip() if match else ""
+from utils.utils import get_emotion_synonyms
 
 # Train Args
 QUESTION_TEMPLATE = [
@@ -59,8 +51,39 @@ class BaseDataset(Dataset):
     def _add_instance_ids(self, key="instance_id"):
         for idx, ann in enumerate(self.annotation):
             ann[key] = str(idx)
-
     
+    def get_fewshot_conv(self, cfg, fewshot_dict: Dict, video_path: str, audio_path: str, subtitle: str) -> None:
+        if cfg.icl.fewshot > 0:
+            assert cfg.icl.fewshot <= 8, "Too many samples"
+            conversations = [{"role": "system", "content": [{"type": "text", "text": "As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Here are some examples."}]}]
+            for i, demo in enumerate(fewshot_dict):
+                label = demo['label'] if cfg.use_mercaptionplus else f"The character's emotional state is {get_emotion_synonyms(demo['label'].lower())}"
+                conversations.append({
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": f"<Demonstration {i+1}>"},
+                        {"type": "video", "video": demo['video_path']},
+                        {"type": "audio", "audio": demo['audio_path']},
+                        {"type": "text", "text": f"Subtitle content of this video: {demo['subtitle']}; Please recognize all possible emotional states of the character."}
+                    ]
+                })
+                conversations.append({
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": f"{label}"}
+                    ]
+                })
+        conversations.append({
+            "role": "user",
+            "content": [
+            {"type": "video", "video": video_path},
+            {"type": "audio", "audio": audio_path},
+            {"type": "text", "text": f"Subtitle content of this video: {subtitle}; Please recognize all possible emotional states of the character."}
+        ]
+    })
+        return conversations
+        pass
+
     def get_infer_conv(self, cfg: OmegaConf, video_path: str, audio_path: str, image_path: str, subtitle: str) -> List:
         if cfg.run.eval.modality == 'video_audio_face':
             conversations = [
@@ -70,15 +93,6 @@ class BaseDataset(Dataset):
                     {"type": "audio", "audio": audio_path},
                     {"type": "image", "image": image_path},
                     {"type": "text", "text": f"Subtitle content of this video: {subtitle}; As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Please recognize all possible emotional states of the character."}
-                ]}
-            ]
-        elif cfg.run.eval.modality == 'video_audio' and cfg.run.type == 'reason':
-            conversations = [
-                {"role": "system", "content": [{"type": "text", "text": "You're an emotional expert, and answer me question."}]},
-                {"role": "user", "content":  [
-                    {"type": "video", "video": video_path},
-                    {"type": "audio", "audio": audio_path},
-                    {"type": "text", "text": f"Subtitle content of this video: {subtitle}; As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Please infer the person's emotional state and provide your reasoning process."}
                 ]}
             ]
         elif cfg.run.eval.modality == 'video_audio':
@@ -103,7 +117,7 @@ class BaseDataset(Dataset):
                 {"role": "user", "content":  [
                     {"type": "video", "video": video_path},
                     {"type": "audio", "audio": audio_path},
-                    {"type": "text", "text": f"Subtitle content of this video: {subtitle}; \nPlease recognize all possible emotional states of the character."}
+                    {"type": "text", "text": f"Subtitle content of this video: {subtitle}; \nBased on the three modalities I gave you — text, video, and audio — please recognize all possible emotional states of the character."}
                 ]},
             ]
         else:
@@ -121,4 +135,26 @@ class BaseDataset(Dataset):
         sample['inputs'] = inputs
         
         return sample
-    
+
+
+
+class ConcatDataset(ConcatDataset):
+    def __init__(self, datasets: Iterable[Dataset]) -> None:
+        super().__init__(datasets)
+
+    def collater(self, samples):
+        # TODO For now only supports datasets with same underlying collater implementations
+
+        all_keys = set()
+        for s in samples:
+            all_keys.update(s)
+
+        shared_keys = all_keys
+        for s in samples:
+            shared_keys = shared_keys & set(s.keys())
+
+        samples_shared_keys = []
+        for s in samples:
+            samples_shared_keys.append({k: s[k] for k in s.keys() if k in shared_keys})
+
+        return self.datasets[0].collater(samples_shared_keys)

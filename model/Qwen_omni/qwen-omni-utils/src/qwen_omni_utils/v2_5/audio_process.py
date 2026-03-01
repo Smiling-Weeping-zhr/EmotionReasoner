@@ -91,4 +91,7 @@ def process_audio_info(conversations: list[dict] | list[list[dict]], use_audio_i
                 )
     if len(audios) == 0:
         audios = None
+    else:
+        max_len = int(8 * SAMPLE_RATE)  # Up to 8 seconds corresponds to the number of sampling points
+        audios = [a[:max_len] for a in audios]  # Crop each piece of audio and cut it off for a long time
     return audios

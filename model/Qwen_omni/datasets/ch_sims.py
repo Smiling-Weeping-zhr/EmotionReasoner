@@ -53,18 +53,13 @@ class CH_SIMS_Dataset(BaseDataset):
         # elif not os.path.exists(openface_path):
         #     raise FileNotFoundError(f"Openface file not found: {openface_path}")
 
-        subtitle = row['text_en'] if self.dir == 'test' else row['text']
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=subtitle)
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
-            conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=subtitle)
+        if not self.cfg.fewshot:
+            conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['text_en'])
             sample = super().process_video_audio_text(conversations=conversations)
         else:
             conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['file']], video_path=video_path, audio_path=audio_path, subtitle=row['text'])
             sample = super().process_video_audio_text(conversations=conversations)
         
-        # import ipdb; ipdb.set_trace()
         sample['annotation'] = row['annotation']
         sample['label'] = row['label']
         sample['text'] = row['text']

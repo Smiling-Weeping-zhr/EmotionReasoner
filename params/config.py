@@ -66,15 +66,15 @@ PATH_TO_LABEL = {
 #######################
 ## store global values
 #######################
-# DEFAULT_IMAGE_PATCH_TOKEN = '<ImageHere>'
-# DEFAULT_AUDIO_PATCH_TOKEN = '<AudioHere>'
-# DEFAULT_FRAME_PATCH_TOKEN = '<FrameHere>'
-# DEFAULT_FACE_PATCH_TOKEN  = '<FaceHere>'
-# DEFAULT_MULTI_PATCH_TOKEN = '<MultiHere>'
+DEFAULT_IMAGE_PATCH_TOKEN = '<ImageHere>'
+DEFAULT_AUDIO_PATCH_TOKEN = '<AudioHere>'
+DEFAULT_FRAME_PATCH_TOKEN = '<FrameHere>'
+DEFAULT_FACE_PATCH_TOKEN  = '<FaceHere>'
+DEFAULT_MULTI_PATCH_TOKEN = '<MultiHere>'
 
-# few_shot = 16
-# DEFAULT_AUDIO_PATCH_TOKEN_ICL = ['<AudioHere1>', '<AudioHere2>', '<AudioHere3>', '<AudioHere4>', '<AudioHere5>', '<AudioHere6>', '<AudioHere7>', '<AudioHere8>', '<AudioHere9>', '<AudioHere10>', '<AudioHere11>', '<AudioHere12>', '<AudioHere13>', '<AudioHere14>', '<AudioHere15>', '<AudioHere16>']
-# DEFAULT_FRAME_PATCH_TOKEN_ICL = ['<FrameHere1>', '<FrameHere2>', '<FrameHere3>', '<FrameHere4>', '<FrameHere5>', '<FrameHere6>', '<FrameHere7>', '<FrameHere8>', '<FrameHere9>', '<FrameHere10>', '<FrameHere11>', '<FrameHere12>', '<FrameHere13>', '<FrameHere14>', '<FrameHere15>', '<FrameHere16>']
-# DEFAULT_FACE_PATCH_TOKEN_ICL = ['<FaceHere1>', '<FaceHere2>', '<FaceHere3>', '<FaceHere4>', '<FaceHere5>', '<FaceHere6>', '<FaceHere7>', '<FaceHere8>', '<FaceHere9>', '<FaceHere10>', '<FaceHere11>', '<FaceHere12>', '<FaceHere13>', '<FaceHere14>', '<FaceHere15>', '<FaceHere16>']
-# DEFAULT_MULTI_PATCH_TOKEN_ICL = ['<MultiHere1>', '<MultiHere2>', '<MultiHere3>', '<MultiHere4>', '<MultiHere5>', '<MultiHere6>', '<MultiHere7>', '<MultiHere8>', '<MultiHere9>', '<MultiHere10>', '<MultiHere11>', '<MultiHere12>', '<MultiHere13>', '<MultiHere14>', '<MultiHere15>', '<MultiHere16>']
-# IGNORE_INDEX = -100
+few_shot = 16
+DEFAULT_AUDIO_PATCH_TOKEN_ICL = ['<AudioHere1>', '<AudioHere2>', '<AudioHere3>', '<AudioHere4>', '<AudioHere5>', '<AudioHere6>', '<AudioHere7>', '<AudioHere8>', '<AudioHere9>', '<AudioHere10>', '<AudioHere11>', '<AudioHere12>', '<AudioHere13>', '<AudioHere14>', '<AudioHere15>', '<AudioHere16>']
+DEFAULT_FRAME_PATCH_TOKEN_ICL = ['<FrameHere1>', '<FrameHere2>', '<FrameHere3>', '<FrameHere4>', '<FrameHere5>', '<FrameHere6>', '<FrameHere7>', '<FrameHere8>', '<FrameHere9>', '<FrameHere10>', '<FrameHere11>', '<FrameHere12>', '<FrameHere13>', '<FrameHere14>', '<FrameHere15>', '<FrameHere16>']
+DEFAULT_FACE_PATCH_TOKEN_ICL = ['<FaceHere1>', '<FaceHere2>', '<FaceHere3>', '<FaceHere4>', '<FaceHere5>', '<FaceHere6>', '<FaceHere7>', '<FaceHere8>', '<FaceHere9>', '<FaceHere10>', '<FaceHere11>', '<FaceHere12>', '<FaceHere13>', '<FaceHere14>', '<FaceHere15>', '<FaceHere16>']
+DEFAULT_MULTI_PATCH_TOKEN_ICL = ['<MultiHere1>', '<MultiHere2>', '<MultiHere3>', '<MultiHere4>', '<MultiHere5>', '<MultiHere6>', '<MultiHere7>', '<MultiHere8>', '<MultiHere9>', '<MultiHere10>', '<MultiHere11>', '<MultiHere12>', '<MultiHere13>', '<MultiHere14>', '<MultiHere15>', '<MultiHere16>']
+IGNORE_INDEX = -100

@@ -41,7 +41,7 @@ from transformers import (
 )
 from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
 from transformers.utils import is_peft_available
-
+import ipdb
 from trl.data_utils import apply_chat_template, is_conversational, maybe_apply_chat_template
 from trl.models import create_reference_model, prepare_deepspeed, unwrap_model_for_generation
 from trl.trainer.grpo_config import GRPOConfig
@@ -52,7 +52,7 @@ from qwen_omni_utils import process_mm_info, process_audio_info, process_vision_
 import copy
 
 if is_peft_available():
-    from peft import PeftConfig, get_peft_model
+    from peft import PeftConfig, get_peft_model, PeftModel
     
 
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
@@ -82,13 +82,14 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
         min_pixels: Optional[int] = 3136,
         attn_implementation: str = "flash_attention_2",
         use_audio_in_video: bool = True,
+        use_sft_base_model: bool = False,
+        sft_base_model_path: str = None,
     ):
         # Args
         if args is None:
             model_name = model if isinstance(model, str) else model.config._name_or_path
             model_name = model_name.split("/")[-1]
             args = GRPOConfig(f"{model_name}-GRPO")
-            
         # Models
         # Trained model
         model_init_kwargs = args.model_init_kwargs or {}
@@ -107,25 +108,23 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                     "Invalid `torch_dtype` passed to `GRPOConfig`. Expected either 'auto' or a string representing "
                     f"a `torch.dtype` (e.g., 'float32'), but got {torch_dtype}."
                 )
-            
             # 在 Qwen2_5OmniGRPOTrainer.__init__ 方法中的模型初始化部分
             if "Qwen2.5-Omni" in model_id:
                 # 为 Qwen2.5-Omni 模型创建一个新的 model_init_kwargs 字典
                 omni_model_init_kwargs = model_init_kwargs.copy()
-                if "use_cache" in omni_model_init_kwargs:
+                if "use_cache" in omni_model_init_kwargs: # Enable gradient checkpoint
                     del omni_model_init_kwargs["use_cache"]
-                
                 # 加载配置并修改
                 config = AutoConfig.from_pretrained(model_id)
                 config.enable_audio_output = False  # 在配置中禁用音频输出
                 
                 # 使用修改后的配置加载模型
                 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-                    model_id, 
+                    model_id,
+                    torch_dtype=torch.bfloat16,
                     config=config,
                     **omni_model_init_kwargs
                 )
-
                 # 确保 talker 被禁用
                 model.disable_talker()
                 print("Talker component has been disabled")
@@ -140,16 +139,37 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                 )
 
         if peft_config is not None:
-            model = get_peft_model(model, peft_config)
-
+            if use_sft_base_model:
+                model = PeftModel.from_pretrained(model, sft_base_model_path, is_local=True)
+                for name, param in model.named_parameters():
+                    if "lora" in name.lower():
+                        param.requires_grad = True
+                        
+                print(f"You are using the sft base model {sft_base_model_path}.")
+            else:
+                model = get_peft_model(model, peft_config)
+                print("Initialize the peft model.")
+                
+            model.gradient_checkpointing_enable()
+            # freeze audio_tower
+            for param in model.thinker.audio_tower.parameters():
+                param.requires_grad = False
+            # freeze visual
+            for param in model.thinker.visual.parameters():
+                param.requires_grad = False
+            model.print_trainable_parameters()
+            
+            
+        is_deepspeed = False
         # 在创建参考模型部分
-        if is_deepspeed_zero3_enabled():
+        # if is_deepspeed_zero3_enabled():
+        if is_deepspeed:
             if "Qwen2.5-Omni" in model_id:
                 # 同样处理参考模型
                 omni_model_init_kwargs = model_init_kwargs.copy()
-                if "use_cache" in omni_model_init_kwargs:
+                if "use_cache" in omni_model_init_kwargs: # Enable gradient checkpointing
                     del omni_model_init_kwargs["use_cache"]
-                
+                # model.base_model.thinker BUG
                 config = AutoConfig.from_pretrained(model_id)
                 config.enable_audio_output = False  # 在配置中禁用音频输出
                 
@@ -176,6 +196,7 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                 pad_token_id = processing_class.tokenizer.pad_token_id
                 processing_class.pad_token_id = pad_token_id
                 processing_class.eos_token_id = processing_class.tokenizer.eos_token_id
+                # processing_class.tokenizer.padding_side = 'left' # right is wrong
             else:
                 raise ValueError(f"Unsupported model ID for processor: {model_id}")
 
@@ -283,9 +304,12 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
             self._signature_columns = ["prompt"]
 
     def _get_per_token_logps(self, model, input_ids, **kwargs):
-        logits = model.thinker(input_ids, **kwargs).logits
-        # logits = model(input_ids, **kwargs).logits
-        
+        #model.thinker(input_ids, **kwargs).logits # Full fine-tune
+        # logits = model.base_model.thinker(input_ids, **kwargs).logits # Lora PEFT, it is frozen, don't have grad
+        logits = model(input_ids, **kwargs).logits
+        # # logits = model.generate(input_ids, **kwargs) # torch.no_grad() ??
+        # logits = model.base_model.model.thinker(input_ids=input_ids, **kwargs).logits
+        # Shift logits and labels
         logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
         input_ids = input_ids[:, 1:]  # (B, L-1), exclude the first input ID since we don't have logits for it
         # Compute the log probabilities for the input tokens. Use a loop to reduce memory peak.
@@ -302,17 +326,15 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         if return_outputs:
             raise ValueError("The GRPOTrainer does not support returning outputs")
-    
-        prompts = [x["prompt"] for x in inputs]
+        answer_gt = [x["answer_gt"] for x in inputs] # The answer_gt
         
         input_copy = copy.deepcopy(inputs[0]['prompt'])
         # input_copy = self.remove_none_from_data(input_copy)
 
         audios, images, videos = process_mm_info(input_copy, use_audio_in_video=self.use_audio_in_video)
 
-
         text = self.processing_class.apply_chat_template(
-            input_copy,  # 对话格式数据
+            input_copy,
             add_generation_prompt=True, 
             tokenize=False
         )
@@ -373,10 +395,11 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                     prompt_inputs["image_grid_thw"] = prompt_inputs["image_grid_thw"].repeat(repeat_factor, 1)
 
 
-        if inputs[0]['data_type'] == 'video':
+        elif inputs[0]['data_type'] == 'video_audio':
             # 处理视频
             prompt_inputs["pixel_values_videos"] = prompt_inputs["pixel_values_videos"].repeat(len(prompt_completion_ids), 1)
             prompt_inputs["video_grid_thw"] = prompt_inputs["video_grid_thw"].repeat(len(prompt_completion_ids), 1)
+            # prompt_inputs["video_second_per_grid"] = prompt_inputs["video_second_per_grid"].repeat_interleave(repeat_factor, dim=0)
             if 'second_per_grid_ts' in prompt_inputs:
                 del prompt_inputs["second_per_grid_ts"]
 
@@ -386,7 +409,7 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                 if "feature_attention_mask" in prompt_inputs:
                     prompt_inputs["feature_attention_mask"] = prompt_inputs["feature_attention_mask"].repeat_interleave(repeat_factor, dim=0)
 
-        if inputs[0]['data_type'] == 'image_audio':
+        elif inputs[0]['data_type'] == 'image_audio':
             # 处理图像
             if "pixel_values" in prompt_inputs:
                 prompt_inputs["pixel_values"] = prompt_inputs["pixel_values"].repeat(repeat_factor, 1)
@@ -398,18 +421,19 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                 prompt_inputs["input_features"] = prompt_inputs["input_features"].repeat_interleave(repeat_factor, dim=0)
                 if "feature_attention_mask" in prompt_inputs:
                     prompt_inputs["feature_attention_mask"] = prompt_inputs["feature_attention_mask"].repeat_interleave(repeat_factor, dim=0)
-
+        else:
+            raise ValueError(f'We do not support the data type {inputs}')
 
         per_token_logps = self._get_per_token_logps(model, prompt_completion_ids, **prompt_inputs)
         per_token_logps = per_token_logps[:, prompt_length - 1 :]
         
-        with torch.inference_mode():
+        with torch.inference_mode(): 
             if self.ref_model is not None:
                 ref_per_token_logps = self._get_per_token_logps(self.ref_model, prompt_completion_ids, **prompt_inputs)
             else:
                 with self.accelerator.unwrap_model(model).disable_adapter():
                     ref_per_token_logps = self._get_per_token_logps(model, prompt_completion_ids, **prompt_inputs)
-            ref_per_token_logps = ref_per_token_logps[:, prompt_length - 1 :]
+        ref_per_token_logps = ref_per_token_logps[:, prompt_length - 1 :]
 
         # 计算KL散度
         x_clamped = torch.clamp(ref_per_token_logps - per_token_logps, min=-10, max=10)
@@ -421,16 +445,16 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
             completions = [[{"role": "assistant", "content": completion}] for completion in completions]
         
         # 计算奖励
-        prompts = [prompt for prompt in prompts for _ in range(self.num_generations)]
-        rewards_per_func = torch.zeros(len(prompts), len(self.reward_funcs), device=device)
+        answer_gt = [answer for answer in answer_gt for _ in range(self.num_generations)]
+        rewards_per_func = torch.zeros(len(answer_gt), len(self.reward_funcs), device=device)
         for i, (reward_func, reward_processing_class) in enumerate(
             zip(self.reward_funcs, self.reward_processing_classes)
         ):
-            reward_kwargs = {key: [] for key in inputs[0].keys() if key not in ["prompt", "completion"]}
+            reward_kwargs = {key: [] for key in inputs[0].keys() if key not in ["answer_gt", "completion"]}
             for key in reward_kwargs:
                 for example in inputs:
                     reward_kwargs[key].extend([example[key]] * self.num_generations)
-            output_reward_func = reward_func(prompts=prompts, completions=completions, **reward_kwargs)
+            output_reward_func = reward_func(answer_gt=answer_gt, predictions=completions, **reward_kwargs)
             rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
         # === 总奖励 START ===
@@ -442,7 +466,7 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
             rewards = (rewards_per_func * reward_weights).sum(dim=1)
 
     
-        # 长度控制奖励
+        # # 长度控制奖励
         if self.len_control:
             mask = rewards_per_func[:, 0] > 0.1
             lenth_list = completion_mask.sum(1)
@@ -450,8 +474,7 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
                     
             if len(selected_indices) > 1:     
                 for idx in selected_indices: # TODO: The <think>, and the </answer>, and calculate the 
-                    # if 320 <= lenth_list[idx] <= 512:
-                    if 160 <= lenth_list[idx] <= 320: # [57, 258]
+                    if 160 <= lenth_list[idx] <= 300: # [57, 258]
                         rewards[idx] += 0.2
 
         # 分组奖励计算
@@ -462,14 +485,11 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
         mean_grouped_rewards = mean_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
         std_grouped_rewards = std_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
         advantages = (rewards - mean_grouped_rewards) / (std_grouped_rewards + 1e-4)
-
         # 损失计算
         per_token_loss = torch.exp(per_token_logps - per_token_logps.detach()) * advantages.unsqueeze(1)
-        
         # With KL loss
         per_token_loss = -(per_token_loss - self.beta * per_token_kl)
         
-
         loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
 
         # 记录指标
@@ -495,6 +515,7 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
         correct_devices = (rewards_per_device >= 2).all(dim=1)
         correct_ratio = correct_devices.sum().item() / num_devices
         
+        self._metrics["loss"].append(loss.item())
         self._metrics["all_wrong"].append(wrong_ratio)
         self._metrics["all_correct"].append(correct_ratio)
         
@@ -504,7 +525,8 @@ class Qwen2_5OmniGRPOTrainer(Trainer):
         mean_kl = ((per_token_kl * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
         self._metrics["kl"].append(self.accelerator.gather_for_metrics(mean_kl).mean().item())
 
-  
+        torch.cuda.empty_cache()
+        # print(f"loss: {loss.item()}")
         return loss
     
     def log(self, logs: dict[str, float], start_time: Optional[float] = None) -> None:

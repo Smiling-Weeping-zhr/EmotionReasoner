@@ -3,15 +3,13 @@ model:
   model_type: pretrain_vicuna
   device: cuda:0
 
-  # ckpt: "/root/autodl-tmp/EMER-OpenMLM/Qwen2.5-Omni-7B"
-  # peft_ckpt: "/root/autodl-tmp/Qwen-RLVR/qwen-omni-peft-sft-func3/checkpoint-175"
-  ckpt: "/root/autodl-tmp/EMER-OpenMLM/Qwen2.5-Omni-7B"
-  # peft_ckpt: "/root/autodl-tmp/Qwen-RLVR/qwen-omni-peft-tw-reward-func4-base-merge-1e-5/checkpoint-170"
+  ckpt: "/root/autodl-tmp/EMER-MLLM/Qwen2.5-Omni-7B"
+  peft_ckpt: "/root/autodl-tmp/EMER-MLLM/qwen-omni-peft-tw-reward-func4-base-sft/checkpoint-195"
 
 dataset:
   name: 'MER2024'
   eval_datasets: ['MER2024', 'MER2023', 'CMU-MOSEI', 'CMU-MOSI', 'CH-SIMS-v2', 'CH-SIMS', 'MELD', 'IEMOCAP', 'OV-MERD']
-  # eval_datasets: ['CMU-MOSEI', 'OV-MERD']
+  # eval_datasets: ['MER2024', 'CMU-MOSI', 'CH-SIMS-v2']
   path_dict: {
     "MER2024": "/root/autodl-tmp/EMER-dataset/MER-UniBench/mer2024-dataset-process",
     "MER2023": "/root/autodl-tmp/EMER-dataset/MER-UniBench/mer2023-dataset-process",
@@ -21,25 +19,24 @@ dataset:
     "CH-SIMS": "/root/autodl-tmp/EMER-dataset/MER-UniBench/sims-process",
     "MELD": "/root/autodl-tmp/EMER-dataset/MER-UniBench/meld-process",
     "IEMOCAP": "/root/autodl-tmp/EMER-dataset/MER-UniBench/iemocap-process",
-    "MERCaptionPlus": "/root/autodl-tmp/EMER-dataset/MERCaption+",
+    "MERCaptionPlus": "/root/autodl-tmp/Smiling-Weeping-zhr___MERCaprion-Pretrain/MERCaptionPlus",
     "OV-MERD": '/root/autodl-tmp/EMER-dataset/MER-UniBench/ov-merd-process',
     }
+  NRC_VAD: '/root/autodl-tmp/NRC_VAD.csv'
+  ew_coarse: '/root/autodl-tmp/Smiling-Weeping-zhr___MERCaprion-Pretrain/MERCaptionPlus/ew_coarse_sentiment.csv'
 
 fewshot: False
 icl: 
-  fewshot: 8
+  fewshot: 1
 
 run:
-  type: 'eval'
+  type: 'train'
   eval:
     batch_size: 1
     modality: 'video_audio'
 
   train:
+    phase: 'rl'
     fewshot: False
     save_path: '/root/autodl-tmp/Qwen-Omni-RL'
     modality: 'video_audio'
-    
-calculate_OV:
-  eval_datasets: ['CH-SIMS']
-  

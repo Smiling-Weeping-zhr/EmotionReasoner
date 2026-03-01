@@ -12,7 +12,6 @@ from functools import lru_cache
 from io import BytesIO
 from typing import Optional
 
-import numpy as np
 import requests
 import torch
 import torchvision
@@ -30,17 +29,18 @@ MAX_PIXELS = 16384 * 28 * 28
 MAX_RATIO = 200
 
 VIDEO_MIN_PIXELS = 128 * 28 * 28
-VIDEO_MAX_PIXELS = 768 * 28 * 28
+# VIDEO_MAX_PIXELS = 768 * 28 * 28
+VIDEO_MAX_PIXELS = 512 * 28 * 28 # 640 512
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 # FPS_MAX_FRAMES = 768
-FPS_MAX_FRAMES = 16 # 24
+FPS_MAX_FRAMES = 8 # 24
 
 # Set the maximum number of video token inputs.
 # Here, 128K represents the maximum number of input tokens for the VLLM model.
 # Remember to adjust it according to your own configuration.
-VIDEO_TOTAL_PIXELS = int(float(os.environ.get('VIDEO_MAX_PIXELS', 128000 * 28 * 28 * 0.9)))
+VIDEO_TOTAL_PIXELS = int(float(os.environ.get('VIDEO_MAX_PIXELS', 128000 * 28 * 28 * 0.6))) # 0.9
 logger.info(f"set VIDEO_TOTAL_PIXELS: {VIDEO_TOTAL_PIXELS}")
 
 
@@ -291,37 +291,37 @@ def calculate_video_frame_range(
     return start_frame, end_frame, end_frame - start_frame + 1
 
 
-# def _read_video_decord(
-#     ele: dict,
-# ) -> (torch.Tensor, float):
-#     """read video using decord.VideoReader
+def _read_video_decord(
+    ele: dict,
+) -> (torch.Tensor, float):
+    """read video using decord.VideoReader
 
-#     Args:
-#         ele (dict): a dict contains the configuration of video.
-#         support keys:
-#             - video: the path of video. support "file://", "http://", "https://" and local path.
-#             - video_start: the start time of video.
-#             - video_end: the end time of video.
-#     Returns:
-#         torch.Tensor: the video tensor with shape (T, C, H, W).
-#     """
-#     import decord
-#     video_path = ele["video"]
-#     st = time.time()
-#     vr = decord.VideoReader(video_path)
-#     total_frames, video_fps = len(vr), vr.get_avg_fps()
-#     start_frame, end_frame, total_frames = calculate_video_frame_range(
-#         ele,
-#         total_frames,
-#         video_fps,
-#     )
-#     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-#     idx = torch.linspace(start_frame, end_frame, nframes).round().long().tolist()
-#     video = vr.get_batch(idx).asnumpy()
-#     video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
-#     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-#     sample_fps = nframes / max(total_frames, 1e-6) * video_fps
-#     return video, sample_fps
+    Args:
+        ele (dict): a dict contains the configuration of video.
+        support keys:
+            - video: the path of video. support "file://", "http://", "https://" and local path.
+            - video_start: the start time of video.
+            - video_end: the end time of video.
+    Returns:
+        torch.Tensor: the video tensor with shape (T, C, H, W).
+    """
+    import decord
+    video_path = ele["video"]
+    st = time.time()
+    vr = decord.VideoReader(video_path)
+    total_frames, video_fps = len(vr), vr.get_avg_fps()
+    start_frame, end_frame, total_frames = calculate_video_frame_range(
+        ele,
+        total_frames,
+        video_fps,
+    )
+    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    idx = torch.linspace(start_frame, end_frame, nframes).round().long().tolist()
+    video = vr.get_batch(idx).asnumpy()
+    video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
+    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    sample_fps = nframes / max(total_frames, 1e-6) * video_fps
+    return video, sample_fps
 
 
 def is_torchcodec_available() -> bool:
@@ -337,57 +337,6 @@ def is_torchcodec_available() -> bool:
     except (ImportError, AttributeError, Exception):
         return False
 
-def _read_video_decord(ele: dict) -> (torch.Tensor, float):
-    """
-    Read video using OpenCV (cv2).
-
-    Args:
-        ele (dict): a dict contains:
-            - video: video file path or URL
-            - video_start (optional): start time in seconds
-            - video_end (optional): end time in seconds
-
-    Returns:
-        video (Tensor): Tensor with shape (T, C, H, W)
-        sample_fps (float): sampled fps
-    """
-    import cv2
-    video_path = ele["video"]
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Failed to open video: {video_path}")
-
-    st = time.time()
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # 计算起始帧和结束帧
-    start_frame, end_frame, total_frames = calculate_video_frame_range(
-        ele, total_frames, video_fps
-    )
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    idx = torch.linspace(start_frame, end_frame, nframes).round().long().tolist()
-
-    frames = []
-    for i in range(end_frame + 1):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        if i in idx:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frames.append(frame)
-
-    cap.release()
-
-    # 处理成 TCHW 格式
-    if len(frames) == 0:
-        raise RuntimeError(f"No frames read from video: {video_path}")
-    video = np.stack(frames)  # (T, H, W, C)
-    video = torch.tensor(video).permute(0, 3, 1, 2)  # (T, C, H, W)
-
-    logger.info(f"cv2: {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    sample_fps = nframes / max((end_frame - start_frame + 1), 1e-6) * video_fps
-    return video, sample_fps
 
 def _read_video_torchcodec(
     ele: dict,

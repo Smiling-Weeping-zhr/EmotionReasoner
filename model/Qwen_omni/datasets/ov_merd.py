@@ -46,15 +46,11 @@ class OVMERD_Dataset(BaseDataset):
         elif not os.path.exists(openface_path):
             raise FileNotFoundError(f"Openface file not found: {openface_path}")
         
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
+        if not self.cfg.fewshot:
             conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
             sample = super().process_video_audio_text(conversations=conversations)
         else:
-            conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['name']], video_path=video_path, audio_path=audio_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
+            raise ValueError(f"{self.cfg.fewshot} error.")
         
         sample['reason_en'] = row['reason_en']
         sample['reason_ch'] = row['reason_ch']

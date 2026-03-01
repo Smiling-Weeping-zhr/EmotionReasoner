@@ -2,10 +2,5 @@
 *.pyc
 *.npz
 __pycache__/
-/root/autodl-tmp/EMER/test.py
-*.png
-*.txt
-*.csv
-*.jpg
-*.log
-*.gradio
+/wandb/
+/experiment/train_qwen_omni/logs

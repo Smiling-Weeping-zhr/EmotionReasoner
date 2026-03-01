@@ -475,6 +475,14 @@ def wheel_metric_calculation(gt_root=None, gt_csv=None, name2gt=None,
                              process_names=None, inter_print=True, level='level1'):
 
     # 已 M-avg 为主指标
+    # candidate_metrics = [
+    #                     'case1', 'case2',
+    #                     'case3_wheel1_level1', 'case3_wheel1_level2',
+    #                     'case3_wheel2_level1', 'case3_wheel2_level2',
+    #                     'case3_wheel3_level1', 'case3_wheel3_level2',
+    #                     'case3_wheel4_level1', 'case3_wheel4_level2',
+    #                     'case3_wheel5_level1', 'case3_wheel5_level2',
+    #                     ]
     if level == 'level1':
         candidate_metrics = [
                             'case3_wheel1_level1',

@@ -17,66 +17,49 @@ EmotionReasoner introduces a reasoning-enhanced learning framework to:
 The framework integrates reinforcement learning (GRPO-based optimization), structured reward design, and model-driven self-evaluation to enhance reasoning quality.
 
 ---
-## 🏗 Framework Architecture
 
-EmotionReasoner consists of the following core components:
-![Framework Overview](assets/overview.png)
+## 📦 Dataset
+
+### MERCaption+ Dataset
+
+We conduct experiments on the **MERCaption+** dataset:
+
+👉 https://huggingface.co/datasets/MERChallenge/MER2025
+
+Please download the dataset from HuggingFace and place it under your designated data directory.
+
 ---
 
-### General Checkpoints
-| Model Name     | Model Type |
-|:----------------|:------------:|
-| [Qwen2.5-Omni-7B](https://www.modelscope.cn/models/qwen/Qwen2.5-7B)  | Base Model |
+## 🧠 Base Model
 
+EmotionReasoner is built upon the following pretrained backbone:
 
-### EmotionReasoner Checkpoints
-| Model Name     | Model Type |
-|:----------------|:------------:|
-| [EmotionReasoner](https://www.modelscope.cn/models/SmilingWeeping/EmotionReasoner)  | Training on **MERCaption+** |
-| [EmotionReasoner-SelfEval](https://www.modelscope.cn/models/SmilingWeeping/EmotionReasoner)  | Training on **MERCaption+** |
+| Model | Description |
+|-------|------------|
+| [Qwen2.5-Omni-7B](https://www.modelscope.cn/models/qwen/Qwen2.5-7B) | Multimodal Large Language Model Backbone |
 
+Please download the base checkpoint before training.
 
-## 📊 Experimental Results
-
-EmotionReasoner is evaluated on:
-- Basic Emotion Recognition **MER2023 MER2024 MELD IEMOCAP**
-- Sentiment Emotion Recognition **CMU-MOSI CMU-MOSEI CH-SIMS CH-SIMS-v2**
-- Fine-grained Emotion Recognition **OV-MERD**
-![Results-mer](assets/results-mer.png)
-
-- Explanation Metric:
-![Results-emer](assets/results-emer.png)
-
-- Sentence-level attention visualization :
-![Results-visualization](assets/visualization.png)
 ---
 
-## ⚙️ Installation
+## 🚀 Released Checkpoints
+
+### EmotionReasoner Models
+
+| Model | Description |
+|-------|------------|
+| [EmotionReasoner](https://www.modelscope.cn/models/SmilingWeeping/EmotionReasoner) | RL-trained on **MERCaption+** |
+| [EmotionReasoner-SelfEval](https://www.modelscope.cn/models/SmilingWeeping/EmotionReasoner) | RL + Self-Evaluation trained on **MERCaption+** |
+
+---
+
+## 🏋️ Training
+
+This section describes how to train **EmotionReasoner** and **EmotionReasoner-SelfEval** from **Qwen2.5-Omni-7B**.
 
 ```bash
-conda create -n emotionreasoner python=3.10
-conda activate emotionreasoner
-
-pip install -r requirements.txt
-
-# Download the checkpoint
-git clone https://www.modelscope.cn/SmilingWeeping/EmotionReasoner.git
-```
-
-## Evaluation
-```bash
-# You can choose from datasets (MER2023, MER2024, MELD, IEMOCAP, CMU-MOSI, CMU-MOSEI, CH-SIMS, CH-SIMS-v2, OV-MERD)
-# Inference and Storing Results
-python main.py evaluate_affectgpt --dataset='CMU-MOSEI'
-# Calculating metrics
-export VLLM_WORKER_MULTIPROC_METHOD=spawn
-python main.py calculate_metrics --model='qwen_omni_rl'
-
-# or
-./bash/eval_emotionreasoner.sh
-```
-
-```bash
-# eval-type can choose from (OverLap, Ours), the default dataset is OV-MERD
-python main.py calculate_overlap_score --eval_type='Ours'
+# Train EmotionReasoner
+./bash/train_EmotionReasoner_SelfEval.sh
+# Train EmotionReasoner-SelfEval
+./bash/train_EmotionReasoner.sh
 ```

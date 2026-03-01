@@ -28,7 +28,7 @@ def func_postprocess_qwen(response):
     response = response.strip()
     response = response.replace('\n', '') # remove \n
     response = response.strip()
-    return response.lower()
+    return response
 
 
 # 采用qwen完成接口调用：同时支持 prompt 或者 prompt_list
@@ -84,7 +84,7 @@ def get_completion_qwen_bacth(llm, sampling_params, tokenizer, prompt_list):
         prompt = output.prompt
         response = output.outputs[0].text
         response = func_postprocess_qwen(response)
-        batch_responses.append(response.lower())
+        batch_responses.append(response)
         print(f"Prompt: {prompt} \n Response: {response}")
     return batch_responses
 
@@ -344,7 +344,7 @@ def openset_to_onehot_qwen(model=None, tokenizer=None, llm=None, sampling_params
     if reason is not None:
         prompt = func_prompt_template(reason)
         response = get_completion_qwen(model, tokenizer, prompt)
-        return response.lower()
+        return response
 
     ## process for reason_list
     if batch_reasons is not None:
@@ -370,7 +370,7 @@ def openset_to_sentiment_qwen(model=None, tokenizer=None, llm=None, sampling_par
     if reason is not None:
         prompt = func_prompt_template(reason)
         response = get_completion_qwen(model, tokenizer, prompt)
-        return response.lower()
+        return response
 
     ## process for reason_list
     if batch_reasons is not None:

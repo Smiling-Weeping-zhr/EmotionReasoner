@@ -13,6 +13,18 @@
 # limitations under the License.
 
 import os
+import logging
+import wandb
+import warnings
+
+# 屏蔽 transformers 的 INFO 和 DEBUG 日志
+logging.getLogger().setLevel(logging.ERROR)
+# os.environ["WANDB_DISABLED"] = "true"
+
+import ipdb
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import re
 import torch
 import random
@@ -30,6 +42,7 @@ from datasets import Dataset, DatasetDict
 
 from rouge_score import rouge_scorer
 import numpy as np
+
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):
@@ -91,47 +104,32 @@ def extract_think(text: str) -> str:
     m = THINK_TAG.search(text)
     return m.group(1).strip() if m else ""
 
-
-def accuracy_reward(completions, solution, **kwargs):
+def accuracy_reward(answer_gt, predictions, **kwargs):
     """
+    Args: 
+
     完整覆盖你原来所有分支，返回值 均在 [0.0, 1.0] 之间。
     """
-    qtype = kwargs['problem_type'][0]
-    outputs = [c[0]["content"] for c in completions]
+    outputs = [c[0]["content"] for c in predictions]
     rewards = []
+    # ipdb.set_trace()
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
-
-    # 预初始化 Rouge 计算器
-    rouge = rouge_scorer.RougeScorer(['rouge1','rouge2','rougeL'], use_stemmer=True)
-
-    for out, sol in zip(outputs, solution):
-        pred_think = extract_think(out)
-        gt_think   = extract_think(sol)
-        pred_ans = extract_answer(out)
-        gt_ans = extract_answer(sol)
+    for pred, ans in zip(outputs, answer_gt):
+        pred_ans = extract_answer(pred)
+        gt_ans = extract_answer(ans)
         reward = 0
         
-        # Score1 -- 取 rougeL f-measure 的平均（和你 compute_rouge_score 类似）
-        scores1 = rouge.score(gt_think, pred_think)
-        # # 平均 rouge1/2/L 或者单独用 rougeL
-        scores1 += max(0.0, min(1.0, scores1['rougeL'].fmeasure))
-        reward += scores1
-        
         # Score2 -- 计算OV
-        labels = gt_ans.strip("[]").replace(" ", "").split(",")  # ['concern', 'pessimism']
-        pred_ans = pred_ans.lower()
+        labels = [label.strip().lower() for label in gt_ans.strip("[]").split(",")]  # ['concern', 'pessimism']
+        pred_ans = [label.strip().lower() for label in pred_ans.split(",")]
         matched = [label for label in labels if label.lower() in pred_ans] # Count the number of words
-        scores2 = len(matched) / len(labels)
+
+        if len(pred_ans) > len(labels)*2 + 1:
+            scores2 = 0
+        else: # Control the format of the answer
+            scores2 = len(pred_ans) / len(labels)
         reward += scores2
         
-        # Penalty term: To control the length of pred_ans, avoid the more you answer, the more scores you get
-        max_words = max(1, round(len(labels)*0.5)+1)
-
-        # 将 pred_ans 拆成单词（按空格分隔）
-        pred_words = pred_ans.strip().split()
-        if pred_words <= max_words:
-            reward += 0.2
-            
         rewards.append(reward)
 
         if os.getenv("DEBUG_MODE") == "true":
@@ -139,28 +137,79 @@ def accuracy_reward(completions, solution, **kwargs):
             # local_rank = int(os.getenv("LOCAL_RANK", 0))
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(f"------------- {current_time} Accuracy reward: {reward} -------------\n")
-                f.write(f"Think reward: {scores1}, OV reward: {scores2}")
-                f.write(f"Content: {out}\n")
-                f.write(f"Solution: {sol}\n")
+                f.write(f"OV reward: {scores2}\n")
+                f.write(f"Prediction: {pred}\n")
+                f.write(f"Answer_gt: {ans}\n")
             
     return rewards
 
+# def accuracy_reward1(answer_gt, predictions, **kwargs):
+#     """
+#     完整覆盖你原来所有分支，返回值 均在 [0.0, 1.0] 之间。
+#     """
+#     outputs = [c[0]["content"] for c in predictions]
+#     rewards = []
+#     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
 
-def format_reward(completions, **kwargs):
-    rewards = []
-    for c in completions:
-        text = c[0]["content"].strip()          # <-- remove surrounding whitespace
-        rewards.append(
-            1.0 if _FORMAT_PATTERN.fullmatch(text) else 0.0
-        )
-    return rewards
+#     # 预初始化 Rouge 计算器
+#     rouge = rouge_scorer.RougeScorer(['rouge1','rouge2','rougeL'], use_stemmer=True)
+
+#     for pred, ans in zip(outputs, answer_gt):
+#         pred_think = extract_think(pred)
+#         gt_think   = extract_think(ans)
+#         pred_ans = extract_answer(pred)
+#         gt_ans = extract_answer(ans)
+#         reward = 0
+        
+#         # Score1 -- 取 rougeL f-measure 的平均（和你 compute_rouge_score 类似）
+#         scores1 = rouge.score(gt_think, pred_think)
+#         # # 平均 rouge1/2/L 或者单独用 rougeL
+#         scores1 += max(0.0, min(1.0, scores1['rougeL'].fmeasure))
+#         reward += scores1
+        
+#         # Score2 -- 计算OV
+#         labels = gt_ans.strip("[]").replace(" ", "").split(",")  # ['concern', 'pessimism']
+#         pred_ans = pred_ans.lower()
+#         matched = [label for label in labels if label.lower() in pred_ans] # Count the number of words
+#         scores2 = len(matched) / len(labels)
+#         reward += scores2
+        
+#         # Penalty term: To control the length of pred_ans, avoid the more you answer, the more scores you get
+#         max_words = max(1, round(len(labels)*0.5)+1)
+
+#         # 将 pred_ans 拆成单词（按空格分隔）
+#         pred_words = pred_ans.strip().split()
+#         if pred_words <= max_words:
+#             reward += 0.2
+            
+#         rewards.append(reward)
+
+#         if os.getenv("DEBUG_MODE") == "true":
+#             log_path = os.getenv("LOG_PATH") # "./experiment/train_qwen_omni/logs/debug_log.txt"
+#             # local_rank = int(os.getenv("LOCAL_RANK", 0))
+#             with open(log_path, "a", encoding="utf-8") as f:
+#                 f.write(f"------------- {current_time} Accuracy reward: {reward} -------------\n")
+#                 f.write(f"OV reward: {scores2}")
+#                 f.write(f"Prediction: {pred}\n")
+#                 f.write(f"Answer_gt: {ans}\n")
+            
+#     return rewards
+
+# def format_reward(predictions, **kwargs):
+#     rewards = []
+#     for c in predictions:
+#         text = c[0]["content"].strip()          # <-- remove surrounding whitespace
+#         rewards.append(
+#             1.0 if _FORMAT_PATTERN.fullmatch(text) else 0.0
+#         )
+#     return rewards
 
 reward_funcs_registry = {
     "accuracy": accuracy_reward,
     "format": format_reward,
 }
 
-def main(script_args, training_args, cfg, processor):
+def main(script_args, training_args, model_args, cfg, processor):
     # Get reward functions
     reward_funcs = [reward_funcs_registry[func] for func in script_args.reward_funcs]
     
@@ -179,7 +228,7 @@ def main(script_args, training_args, cfg, processor):
         "args": training_args,
         "script_args": script_args,
         "train_dataset": dataset,
-        "eval_dataset": dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        "eval_dataset": None,
         "peft_config": get_peft_config(model_args),
         "attn_implementation": model_args.attn_implementation,
         "max_pixels": script_args.max_pixels,
@@ -193,6 +242,11 @@ def main(script_args, training_args, cfg, processor):
     trainer = trainer_cls(**trainer_kwargs)
     
     if training_args.resume_from_checkpoint is not None:
+        wandb.init(
+            project="huggingface",
+            id="0zze17a4",    # 保持与之前相同
+            resume="allow"
+        )
         checkpoint = training_args.resume_from_checkpoint
         trainer.train(resume_from_checkpoint=checkpoint)
     else:
@@ -212,10 +266,17 @@ def main(script_args, training_args, cfg, processor):
 
 
 if __name__ == "__main__":
-    directory = '/root/autodl-tmp/EMER/experiment/eval_qwen_omni_icl'
+    directory = '/root/autodl-tmp/EMER/experiment/train_qwen_omni'
     cfg = OmegaConf.load(os.path.join(directory, 'hparams.yaml'))
     model_path = cfg.model.ckpt
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path)
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
+#     if True:
+#         wandb.init(
+#         id="2xy9klmp",  # 上一个 run 的 ID
+#     resume="must",  # 强制恢复
+#     project="your-project-name",
+#     name="your-run-name"  # 可选：继续写入原 run 名称
+# )
     main(script_args, training_args, model_args, cfg, processor)

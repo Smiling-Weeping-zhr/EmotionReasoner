@@ -65,7 +65,7 @@ class Registry:
         """
 
         def wrap(task_cls):
-            from model.affectgpt.tasks.base_task import BaseTask
+            from my_affectgpt.tasks.base_task import BaseTask
 
             assert issubclass(
                 task_cls, BaseTask
@@ -105,6 +105,7 @@ class Registry:
                     )
                 )
             cls.mapping["model_name_mapping"][name] = model_cls
+            # ipdb.set_trace()
             return model_cls
 
         return wrap
@@ -286,6 +287,8 @@ class Registry:
     '''
     @classmethod
     def get_model_class(cls, name): # name = 'affectgpt'
+        # import ipdb
+        # ipdb.set_trace()
         return cls.mapping["model_name_mapping"].get(name, None) # get是一种从map中读取数据的方式，更加不容易报错的方法
 
     '''

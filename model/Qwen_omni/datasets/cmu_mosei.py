@@ -28,13 +28,12 @@ class CMU_MOSEI_Dataset(BaseDataset):
             self.label_type_candidates = ['valence', 'sentiment']
         else:
             raise ValueError("Invalid run type. Must be 'eval' or 'train'.")
-
-        self.df['file'] = self.df.apply(lambda row: f"{row['video_id']}_{row['clip_id']}", axis=1)
+        
         base_path = self.cfg.dataset.path_dict['CMU-MOSEI']
 
-        # self.df['openface_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{self.dir}/openface_face', f + '.npy'))
+        self.df['openface_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{self.dir}/openface_face', f + '.npy'))
         self.df['audio_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{self.dir}/subaudio', f + '.wav'))
-        self.df['video_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{self.dir}/subvideo_new', f + '.mp4'))
+        self.df['video_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{self.dir}/subvideo', f + '.mp4'))
          
         
     def __len__(self):
@@ -42,26 +41,22 @@ class CMU_MOSEI_Dataset(BaseDataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        openface_path = None
-        audio_path = row['audio_path']
-        video_path = row['video_path']
+        openface_path = self.df['openface_path']
+        audio_path = self.df['audio_path']
+        video_path = self.df['video_path']
         
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
         elif not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        # elif not os.path.exists(openface_path):
-        #     raise FileNotFoundError(f"Openface file not found: {openface_path}")
+        elif not os.path.exists(openface_path):
+            raise FileNotFoundError(f"Openface file not found: {openface_path}")
 
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['text'])
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
+        if not self.cfg.fewshot:
             conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['text'])
             sample = super().process_video_audio_text(conversations=conversations)
         else:
-            conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['file']], video_path=video_path, audio_path=audio_path, subtitle=row['text'])
-            sample = super().process_video_audio_text(conversations=conversations)
+            raise ValueError(f"{self.cfg.fewshot} error.")
         
         sample['annotation'] = row['annotation']
         sample['label'] = row['label']

@@ -16,57 +16,43 @@ class MER2023_Dataset(BaseDataset):
         self.processor = processor
         
         mer2023_path = self.cfg.dataset.path_dict['MER2023']
+        csv1_path = os.path.join(mer2023_path, 'test1-label.csv')
+        csv2_path = os.path.join(mer2023_path, 'transcription-engchi-polish.csv')
         
+        df1 = pd.read_csv(csv1_path)
+        df2 = pd.read_csv(csv2_path)
 
+        self.df = pd.merge(df1, df2, on='name', how='inner')
         if cfg.run.type in 'eval':
-            csv1_path = os.path.join(mer2023_path, 'test1-label.csv')
-            csv2_path = os.path.join(mer2023_path, 'transcription-engchi-polish.csv')
-            df1 = pd.read_csv(csv1_path)
-            df2 = pd.read_csv(csv2_path)
-            self.df = pd.merge(df1, df2, on='name', how='inner')
-            self.dir = 'test'
+            self.dir = ''
         elif cfg.run.type == 'train':
-            csv1_path = os.path.join(mer2023_path, 'train-label.csv')
-            csv2_path = os.path.join(mer2023_path, 'transcription-engchi-polish.csv')
-            df1 = pd.read_csv(csv1_path)
-            df2 = pd.read_csv(csv2_path)
-            self.df = pd.merge(df1, df2, on='name', how='inner')
-            self.dir = 'train'
+            self.dir = ''
         else:
             raise ValueError("Invalid run type. Must be 'eval' or 'train'.")
-        
-        dir = self.dir  # 'train' or 'test'
-        
-        self.df['audio_path'] = self.df['name'].apply(lambda f: os.path.join(mer2023_path, f'{dir}/audio', f + '.wav'))
-        self.df['video_path'] = self.df['name'].apply(lambda f: os.path.join(mer2023_path, f'{dir}/video', f + '.avi'))
-        
         
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        audio_path = row['audio_path']
-        video_path = row['video_path']
-        openface_path = None
+        video_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['MER2023'], 'video'), row['name']+'.avi')
+        audio_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['MER2023'], 'audio'), row['name']+'.wav')
+        openface_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['MER2023'], 'openface_face'), row['name']+'.npy')
     
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
         elif not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        # elif not os.path.exists(openface_path):
-        #     raise FileNotFoundError(f"Openface file not found: {openface_path}")
+        elif not os.path.exists(openface_path):
+            raise FileNotFoundError(f"Openface file not found: {openface_path}")
 
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
+        if not self.cfg.fewshot:
             conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
             sample = super().process_video_audio_text(conversations=conversations)
+            # ipdb.set_trace()
         else:
-            conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['name']], video_path=video_path, audio_path=audio_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
-            
+            raise ValueError(f"{self.cfg.fewshot} error.")
+        
         sample['discrete'] = row['discrete']
         sample['valence'] = row['valence']
         sample['text'] = row['chinese']

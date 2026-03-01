@@ -16,28 +16,20 @@ class CH_SIMS_v2_Dataset(BaseDataset):
         self.processor = processor
         
         sims_path = self.cfg.dataset.path_dict['CH-SIMS-v2']
+        csv1_path = os.path.join(sims_path, 'meta_translated.csv')
+        
+        df = pd.read_csv(csv1_path)
         
         if cfg.run.type == 'eval':
-            csv1_path = os.path.join(sims_path, 'meta_translated.csv')
-            df = pd.read_csv(csv1_path)
             self.df = df.loc[df['mode'] == 'test']
             self.dir = 'test'
         elif cfg.run.type == 'train':
-            csv1_path = os.path.join(sims_path, 'meta.csv')
-            df = pd.read_csv(csv1_path)
             self.df = df.loc[df['mode'] == 'train']
-            # df = df.rename(columns={'': 'new_name1'})
             self.dir = 'train'
         else:
             raise ValueError("Invalid run type. Must be 'eval' or 'train'.")
         
         self.df['file'] = self.df.apply(lambda row: f"{row['video_id']}_{row['clip_id']}", axis=1)
-        base_path = self.cfg.dataset.path_dict['CH-SIMS-v2']
-        dir = self.dir  # 'train' or 'test'
-        
-        # self.df['openface_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{dir}/openface_face', f + '.npy'))
-        self.df['audio_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{dir}/audio', f + '.wav'))
-        self.df['video_path'] = self.df['file'].apply(lambda f: os.path.join(base_path, f'{dir}/video_new', f + '.mp4'))
 
         
     def __len__(self):
@@ -45,30 +37,27 @@ class CH_SIMS_v2_Dataset(BaseDataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        openface_path = None
-        audio_path = row['audio_path']
-        video_path = row['video_path']
-        
+        video_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['CH-SIMS-v2'], f'{self.dir}/video_new'), row['file']+'.mp4')
+        audio_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['CH-SIMS-v2'], f'{self.dir}/audio'), row['file']+'.wav')
+        openface_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['CH-SIMS-v2'], f'{self.dir}/openface_face'), row['file']+'.npy')
+    
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
         elif not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        elif not os.path.exists(openface_path):
+            raise FileNotFoundError(f"Openface file not found: {openface_path}")
         
-        subtitle = row['text_en'] if self.dir == 'test' else row['text']
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=subtitle)
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
-            conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=subtitle)
+        if not self.cfg.fewshot:
+            conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['text_en'])
             sample = super().process_video_audio_text(conversations=conversations)
         else:
-            conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['file']], video_path=video_path, audio_path=audio_path, subtitle=row['text'])
-            sample = super().process_video_audio_text(conversations=conversations)
+            raise ValueError(f"{self.cfg.fewshot} error.")
         
         sample['annotation'] = row['annotation']
         sample['label'] = row['label']
         sample['text'] = row['text']
-        sample['text_en'] = row['text_en'] if self.dir == 'test' else None
+        sample['text_en'] = row['text_en']
         sample['video_file'] = row['file']
         sample['video_path'] = video_path
         sample['audio_path'] = audio_path
@@ -80,7 +69,7 @@ class CH_SIMS_v2_Dataset(BaseDataset):
         annotation = [item['annotation'] for item in batch]
         label = [item['label'] for item in batch]
         text = [item['text'] for item in batch]
-        text_en = [item['text_en'] for item in batch] if self.dir == 'test' else None
+        text_en = [item['text_en'] for item in batch]
         video_file = [item['video_file'] for item in batch]
         video_path = [item['video_path'] for item in batch]
         audio_path = [item['audio_path'] for item in batch]

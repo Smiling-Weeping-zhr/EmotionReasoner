@@ -33,36 +33,120 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import ast
-from typing import Optional, List, Tuple, Dict, Union
+import ipdb
+import glob
+from typing import Optional, List, Tuple, Dict
 from moviepy import *
 from urllib.parse import urlparse
 
+import numpy as np
 import pandas as pd
 from iopath.common.download import download
 from iopath.common.file_io import file_lock, g_pathmgr
 from utils.registry import registry
 
-QUESTION_TEMPLATE = [
-    "As an expert in emotion analysis, infer the individual's emotion based on facial expressions, body language, environment, and subtitles, with detailed reasoning in <think></think> tags and the final answer in <answer></answer> tags.",
-    "As an emotion analysis expert, analyze the person's emotion by examining facial cues, gestures, surrounding environment, and subtitle content. Provide detailed reasoning within <think> tags and give your final answer inside <answer></answer> tags.",
-    "As a specialist in emotional understanding, deduce the individual's emotion using facial expressions, physical movements, contextual setting, and text subtitles. Explain your thought process in <think></think> and the final emotion in <answer></answer>.",
-    "As an expert in recognizing human emotions, interpret the person's emotional state based on their appearance, body posture, surroundings, and the subtitle dialogue. Place your reasoning in <think></think> and your conclusion in <answer></answer>.",
-    "As a professional in emotion recognition, determine the person's emotion by analyzing facial expressions, body actions, environment, and subtitles. Describe your reasoning inside <think></think> and your answer in <answer></answer>.",
-    "As a trained analyst of emotions, use visual, behavioral, environmental, and textual clues to infer the subject's emotion. Justify your reasoning in <think> tags and state your final answer in <answer> tags.",
-    "Analyze the subject's emotion from facial expressions, movements, context, and subtitles. Detail your reasoning in <think> and state your conclusion in <answer>.",
-    "Using facial, bodily, environmental, and textual signals, infer the emotional state of the person. Explain your thinking in <think> and give the result in <answer>.",
-    "From the person's expressions, posture, environment, and subtitles, infer their emotion. Reason in <think> and conclude in <answer>. <think> reasoning process here </think><answer> answer here </answer>",
-]
+emotion = {
+    'positive': [
+        "happy", "joyful", "cheerful", "optimistic", "enthusiastic", "confident", 
+        "excited", "hopeful", "inspired", "grateful", "pleased", "content", 
+        "delighted", "energetic", "loving", "kind", "friendly", "amused", 
+        "peaceful", "proud", "motivated", "satisfied", "thrilled", "serene", 
+        "upbeat", "radiant", "fulfilled", "generous", "playful", "affectionate", 
+        "relaxed"
+    ],
+    'negative': [
+        "sad", "angry", "frustrated", "anxious", "depressed", "annoyed", 
+        "upset", "jealous", "stressed", "fearful", "pessimistic", "bitter", 
+        "guilty", "miserable", "insecure", "lonely", "irritated", "resentful", 
+        "bored", "confused", "hurt", "discouraged", "panicked", "hostile", 
+        "embarrassed", "hateful", "regretful", "vulnerable", "moody", "enraged", "passive"
+    ],
+    'happy': ["joyful", "cheerful", "delighted", "glad", "content", "pleased",
+              "ecstatic", "elated", "jubilant", "blissful", "overjoyed", "satisfied",
+              "radiant", "buoyant", "upbeat", "thrilled", "exuberant", "merry", "lighthearted",
+              "sunny", "gleeful", "euphoric", "chirpy", "jovial", "perky", "blithe", "gay", "chipper",
+              "zestful", "sparkling"
+    ],
+    'worry': ["anxious", "nervous", "concerned", "uneasy", "apprehensive", "troubled",
+                "distressed", "tense", "fearful", "fretful", "panicky", "agitated", "restless",
+                "edgy", "worried", "distraught", "perturbed", "alarmed", "upset", "shaky", "jumpy",
+                "timid", "disquieted", "disturbed", "neurotic", "tormented", "wary", "hesitant",
+                "doubtful", "insecure"
+    ],
+    'neutral': ["unbiased", "impartial", "nonpartisan", "objective", "disinterested", "detached",
+                "evenhanded", "equitable", "indifferent", "uninvolved", "reserved", "open-minded",
+                "moderate", "fair", "aloof", "dispassionate", "balanced", "unprejudiced", "unemotional",
+                "middle-of-the-road", "nonaligned", "apathetic", "uncommitted", "indecisive",
+                "ambivalent", "cool", "calm", "steady", "level-headed", "temperate"
+    ],
+    'angry' : ["mad", "furious", "irate", "enraged", "annoyed", "resentful", "outraged", "indignant",
+               "cross", "exasperated", "irritated", "infuriated", "vexed", "fuming", "incensed",
+               "livid", "agitated", "wrathful", "peeved", "testy", "choleric","riled", "grumpy",
+               "snappy", "stormy", "heated", "hostile"
+    ],
+    'surprised': ["astonished", "amazed", "startled", "shocked", "stunned", "astounded",
+                  "speechless", "flabbergasted", "dumbfounded", "bewildered", "baffled",
+                  "taken_aback", "aghast", "confounded", "disconcerted", "rattled", "upended",
+                  "jarred", "shaken", "perplexed", "dazed", "nonplussed", "wide-eyed", "overwhelmed",
+                  "incredulous", "unsettled", "jolted", "floored", "staggered", "blindsided"
+    ],
+    'sad': ["unhappy", "sorrowful", "depressed", "melancholy", "mournful", "gloomy", "downcast",
+            "downhearted", "despondent", "dismal", "blue", "dispirited", "forlorn", "woeful",
+            "heartbroken", "grief-stricken", "glum", "lugubrious", "morose", "wistful", "doleful",
+            "crestfallen", "tearful", "dejected", "bummed", "low", "somber", "sullen", "brokenhearted", "troubled"
+    ],
+    'disgust': ["revolting", "repulsive", "repugnant", "nauseating", "sickening", "abhorrent",
+                "loathsome", "vile", "gross", "offensive", "detestable", "disagreeable", "abominable",
+                "foul", "displeasing", "distasteful", "obnoxious", "hideous", "unclean", "unpleasant",
+                "horrid", "nasty", "beastly", "grotesque", "ghastly", "icky", "rank", "yucky",
+                "scornful", "contaminated"
+    ]
+}
+
+def get_emotion_synonyms(emo: str) -> str:
+    emo_list = None
+    if emo in ['happy', 'joy', 'happiness']:
+        emo_list = emotion['happy']
+    elif emo in ['sad', 'sadness']:
+        emo_list = emotion['sad']
+    elif emo in ['neutral']:
+        emo_list = emotion['neutral']
+    elif emo in ['angry', 'anger']:
+        emo_list = emotion['angry']
+    elif emo in ['disgust']:
+        emo_list = emotion['disgust']
+    elif emo in ['surprised', 'surprise']:
+        emo_list = emotion['surprised']
+    elif emo in ['fear', 'worry', 'worried']:
+        emo_list = emotion['worry']
+    elif emo in ['positive']:
+        emo_list = emotion['positive']
+    elif emo in ['negative']:
+        emo_list = emotion['negative']
+    else:
+        raise ValueError(f"{emo} not exists.")
+    
+    num_words = random.randint(4, 5)
+    selected = random.sample(emo_list, num_words)
+    selected.append(emo)
+
+    result = ', '.join(selected)
+    
+    return result
+
 
 def is_url(url_or_filename):
     parsed = urlparse(url_or_filename)
     return parsed.scheme in ("http", "https")
 
+
 def get_cache_path(rel_path):
     return os.path.expanduser(os.path.join(registry.get_path("cache_root"), rel_path))
 
+
 def get_abs_path(rel_path):
     return os.path.join(registry.get_path("library_root"), rel_path)
+
 
 def load_json(filename):
     with open(filename, "r") as f:
@@ -517,107 +601,3 @@ def get_emotion_wheels(labels: List) -> Dict:
                     emo_synonyms[last_emo].append(row['level3'].lower())
     # ipdb.set_trace()
     return emo_synonyms
-
-def video_to_frames(video_path, out_dir, fps=2.0, min_frames=2, max_frames=5):
-    """
-    将视频拆成图片帧，并限制帧率和总帧数范围
-    
-    参数:
-        video_path (str): 输入视频路径 (.mp4)
-        out_dir (str): 输出文件夹路径
-        fps (float): 目标帧率（每秒几帧）
-        min_frames (int): 最少帧数
-        max_frames (int): 最多帧数
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # 打开视频
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"无法打开视频文件: {video_path}")
-
-    # 获取视频参数
-    video_fps = cap.get(cv2.CAP_PROP_FPS)              # 原始帧率
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # 总帧数
-    duration = total_frames / video_fps                # 视频时长（秒）
-
-    # 计算目标帧数
-    target_frames = int(fps * duration)
-    target_frames = max(min_frames, min(max_frames, target_frames))
-
-    # 均匀采样帧索引
-    frame_indices = [int(i * total_frames / target_frames) for i in range(target_frames)]
-
-    print(f"视频总帧数: {total_frames}, 时长: {duration:.2f}s, 采样帧数: {target_frames}")
-
-    saved = 0
-    for i in range(total_frames):
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        if i in frame_indices:
-            out_path = os.path.join(out_dir, f"frame_{saved:04d}.jpg")
-            cv2.imwrite(out_path, frame)
-            if saved > max_frames:
-                break
-            saved += 1
-
-    cap.release()
-    print(f"完成！共保存 {saved} 帧到 {out_dir}/")
-
-def get_IoU_prompt(video_path: Union[str, List[str]] = [], audio_path: str="", subtitle: str="", model_type: str='qwen-omni-rl') -> List:
-    if model_type == 'qwen-omni-rl':
-        return get_tam_frames_inputs_conversations_qwen_rl(video_path=video_path, audio_path=audio_path, subtitle=subtitle)
-    elif model_type == 'qwen-omni':
-        return get_tam_frames_inputs_conversations_qwen_omni(video_path=video_path, audio_path=audio_path, subtitle=subtitle)
-    elif model_type == "qwen2_5_vl":
-        return get_tam_frames_inputs_conversations_qwen_vl(video_path=video_path, subtitle=subtitle)
-    else:
-        raise ValueError(f"We didn't support the model type {model_type}")
-
-def get_tam_frames_inputs_conversations_qwen_rl(video_path: Union[str, List[str]] = [], audio_path: str="", subtitle: str="") -> List:
-    sys_prompt = random.choice(QUESTION_TEMPLATE)
-    if isinstance(video_path, list):
-        conversations = [
-                {"role": "system", "content": [{"type": "text", "text": sys_prompt}]},
-                {"role": "user", "content":  [
-                    {"type": "video", "video": video_path},
-                    {"type": "audio", "audio": audio_path},
-                    {"type": "text", "text": f"Subtitle content of this video: {subtitle}; \nPlease recognize all possible emotional states of the character."}
-                ]},
-            ]
-    else:
-        conversations = [
-                {"role": "system", "content": [{"type": "text", "text": sys_prompt}]},
-                {"role": "user", "content":  [
-                    {"type": "image", "image": video_path},
-                    {"type": "audio", "audio": audio_path},
-                    {"type": "text", "text": f"Subtitle content of this video: {subtitle}; As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Please recognize all possible emotional states of the character."}
-                ]}
-            ]
-
-    return conversations
-
-def get_tam_frames_inputs_conversations_qwen_omni(video_path: str, audio_path: str, subtitle: str) -> List:
-    conversations = [
-        {"role": "system", "content": [{"type": "text", "text": "You're an emotional expert, and answer me question."}]},
-        {"role": "user", "content":  [
-            {"type": "video", "video": video_path},
-            {"type": "audio", "audio": audio_path},
-            {"type": "text", "text": f"Subtitle content of this video: {subtitle}; As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Please recognize all possible emotional states of the character."}
-        ]}
-    ]
-
-    return conversations
-
-def get_tam_frames_inputs_conversations_qwen_vl(video_path: str, subtitle: str) -> List:
-    conversations = [
-        {"role": "system", "content": [{"type": "text", "text": "You're an emotional expert, and answer me question."}]},
-        {"role": "user", "content":  [
-            {"type": "video", "video": video_path},
-            {"type": "text", "text": f"Subtitle content of this video: {subtitle}; As an expert in the field of emotions, please focus on the facial expressions, body movements, environment, subtitle content, etc., in the video to discern clues related to the emotions of the individual. Please recognize all possible emotional states of the character."}
-        ]}
-    ]
-
-    return conversations

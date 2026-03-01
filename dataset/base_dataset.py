@@ -10,7 +10,6 @@ from typing import Iterable
 import random
 import torch
 import numpy as np
-from PIL import Image
 
 from model.Qwen_omni.ImageBind.data import load_audio, transform_audio
 from processor.video_processor import load_video, load_face

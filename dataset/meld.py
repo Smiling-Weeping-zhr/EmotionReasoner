@@ -18,7 +18,6 @@ from dataset.base_dataset import BaseDataset
 from processor.video_processor import AlproVideoEvalProcessor, AlproVideoTrainProcessor
 from torch.utils.data import Dataset
 
-
 class MELD_Dataset(BaseDataset):
     def __init__(self, cfg, vis_transform=None, img_transform=None, txt_transform=None):
         super().__init__() # Initial BaseDataset

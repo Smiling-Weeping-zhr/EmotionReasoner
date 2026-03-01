@@ -1,10 +1,10 @@
 import os
+import ipdb
 import pandas as pd
 
 from moviepy import *
 import os
 import pandas as pd
-from typing import List, Tuple
 from model.Qwen_omni.datasets.base_dataset import BaseDataset
 
 class MERCaptionPlus_Dataset(BaseDataset):
@@ -32,6 +32,15 @@ class MERCaptionPlus_Dataset(BaseDataset):
             lambda row: f"<think>{row['reason']}</think>\n<answer>{row['openset'].strip('[]')}</answer>",
             axis=1
         )
+        # Just for test-stage train
+        sampled_df = self.df.sample(frac=0.1, random_state=419*127)
+        if self.cfg.run.train.phase == 'rl':
+            self.df = sampled_df.reset_index(drop=True)
+        elif self.cfg.run.train.phase == 'sft':
+            sampled_indices = sampled_df.index
+            self.df = self.df.drop(sampled_indices).reset_index(drop=True)
+        else:
+            raise ValueError('phase must be rl or sft')
         
     def __len__(self):
         return len(self.df)
@@ -55,7 +64,7 @@ class MERCaptionPlus_Dataset(BaseDataset):
             sample = super().process_video_audio_text(conversations=conversations)
         else:
             raise ValueError('we did not support this')
-        
+
         sample['prompt'] = conversations
         sample['file'] = row['name']
         sample['english'] = row['english']

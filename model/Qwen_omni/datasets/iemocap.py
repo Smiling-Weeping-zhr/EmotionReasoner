@@ -41,26 +41,22 @@ class IEMOCAP_Dataset(BaseDataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        video_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], self.dir, 'subvideo-tgt'), row['name']+'.avi')
-        audio_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], self.dir, 'subaudio'), row['name']+'.wav')
-        openface_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], self.dir, 'openface_face'), row['name']+'.npy')
+        video_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], 'subvideo-tgt'), row['name']+'.avi')
+        audio_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], 'subaudio'), row['name']+'.wav')
+        openface_path = os.path.join(os.path.join(self.cfg.dataset.path_dict['IEMOCAP'], 'openface_face'), row['name']+'.npy')
         
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
         elif not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        # elif not os.path.exists(openface_path):
-        #     raise FileNotFoundError(f"Openface file not found: {openface_path}")
-
-        if self.cfg.model.name == 'qwen_omni_rl' and not self.cfg.fewshot:
-            conversations = super().get_train_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
-        elif not self.cfg.fewshot:
+        elif not os.path.exists(openface_path):
+            raise FileNotFoundError(f"Openface file not found: {openface_path}")
+        
+        if not self.cfg.fewshot:
             conversations = super().get_infer_conv(cfg=self.cfg, video_path=video_path, audio_path=audio_path, image_path=openface_path, subtitle=row['english'])
             sample = super().process_video_audio_text(conversations=conversations)
         else:
-            conversations = super().get_fewshot_conv(cfg=self.cfg, fewshot_dict=self.fewshot_dict[row['file']], video_path=video_path, audio_path=audio_path, subtitle=row['english'])
-            sample = super().process_video_audio_text(conversations=conversations)
+            raise ValueError(f"{self.cfg.fewshot} error.")
         
         sample['emo'] = idx2emo[row['emo']]
         sample['val'] = row['val']
