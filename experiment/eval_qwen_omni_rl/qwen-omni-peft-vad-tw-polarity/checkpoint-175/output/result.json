@@ -1,0 +1,44 @@
+{
+    "MER2024": {
+        "dataset": "MER2024",
+        "HIT Rate": 0.9356529859457441
+    },
+    "MER2023": {
+        "dataset": "MER2023",
+        "HIT Rate": 0.9130548647414098
+    },
+    "CMU-MOSI": {
+        "dataset": "CMU-MOSI",
+        "WAF": 0.8620798785679141,
+        "Accuracy": 0.8612804878048781
+    },
+    "CH-SIMS-v2": {
+        "dataset": "CH-SIMS-v2",
+        "WAF": 0.8694927171049474,
+        "Accuracy": 0.8693743139407245
+    },
+    "CH-SIMS": {
+        "dataset": "CH-SIMS",
+        "WAF": 0.8693888275266075,
+        "Accuracy": 0.8685567010309279
+    },
+    "MELD": {
+        "dataset": "MELD",
+        "HIT Rate": 0.7355790422426988
+    },
+    "IEMOCAP": {
+        "dataset": "IEMOCAP",
+        "HIT Rate": 0.8214702450408401
+    },
+    "OV-MERD": {
+        "dataset": "OV-MERD",
+        "Fscores": 0.7181728948498554,
+        "Precision": 0.6515174661081676,
+        "Recall": 0.8006650227284456
+    },
+    "CMU-MOSEI": {
+        "dataset": "CMU-MOSEI",
+        "WAF": 0.8430328228679345,
+        "Accuracy": 0.8439735828288387
+    }
+}

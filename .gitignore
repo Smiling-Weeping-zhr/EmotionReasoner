@@ -1,0 +1,11 @@
+*.pkl
+*.pyc
+*.npz
+__pycache__/
+/root/autodl-tmp/EMER/test.py
+*.png
+*.txt
+*.csv
+*.jpg
+*.log
+*.gradio
