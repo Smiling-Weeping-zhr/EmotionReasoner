@@ -26,7 +26,7 @@ EmotionReasoner consists of the following core components:
 ### General Checkpoints
 | Model Name     | Model Type |
 |:----------------|:------------:|
-| [Qwen2.5-Omni-7B](https://www.modelscope.cn/models/qwen/Qwen2.5-7B)  | Base Model |
+| [Qwen2.5-Omni-7B](https://www.modelscope.cn/models/Qwen/Qwen2.5-Omni-7B)  | Base Model |
 
 
 ### EmotionReasoner Checkpoints
